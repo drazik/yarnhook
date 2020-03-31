@@ -16,24 +16,28 @@ const lockfileSpecs = [
   ["npm", "npm-shrinkwrap.json"],
   ["npm", "package-lock.json"],
   ["pnpm", "shrinkwrap.yaml"],
-  ["pnpm", "pnpm-lock.yaml"]
+  ["pnpm", "pnpm-lock.yaml"],
+  ["composer", "composer.lock"]
 ];
 
 const args = {
   yarn: ["install", "--prefer-offline", "--pure-lockfile"],
   npm: ["install", "--prefer-offline", "--no-audit", "--no-save"],
-  pnpm: ["install", "--prefer-offline", "--prefer-frozen-shrinkwrap"]
+  pnpm: ["install", "--prefer-offline", "--prefer-frozen-shrinkwrap"],
+  composer: ["install"]
 };
 
-function getLockfileSpec(currentDir) {
+function getLockfileSpecs(currentDir) {
+  const specs = [];
+
   for (let [cmd, lockfile] of lockfileSpecs) {
     const lockfilePath = join(currentDir, lockfile);
     if (fs.existsSync(lockfilePath)) {
-      return { cmd, lockfilePath };
+      specs.push({ cmd, lockfilePath });
     }
   }
 
-  return null;
+  return specs;
 }
 
 if (!YARNHOOK_BYPASS) {
@@ -42,17 +46,25 @@ if (!YARNHOOK_BYPASS) {
   const gitDir = findParentDir.sync(currentDir, ".git");
 
   // check for lockfiles
-  const lockfileSpec = getLockfileSpec(currentDir);
+  const lockfileSpecs = getLockfileSpecs(currentDir);
 
-  if (YARNHOOK_DEBUG) {
-    console.log("currentDir:", currentDir);
-    console.log("gitDir:", gitDir);
-    console.log("lockfile:", lockfileSpec);
+  if (lockfileSpecs.length === 0) {
+    console.log(
+      "I can't seem to find a lockfile. Currently supported lockfiles are: yarn.lock, package-lock.json and shrinkwrap.yaml. Please " +
+        "open an issue at https://github.com/frontsideair/yarnhook/issues if " +
+        "you think it's my fault."
+    );
   }
 
-  if (lockfileSpec !== null) {
+  for (const spec of lockfileSpecs) {
+    if (YARNHOOK_DEBUG) {
+      console.log("currentDir:", currentDir);
+      console.log("gitDir:", gitDir);
+      console.log("lockfile:", spec);
+    }
+
     // get the command and lockfile path
-    const { cmd, lockfilePath } = lockfileSpec;
+    const { cmd, lockfilePath } = spec;
 
     // run a git diff on the lockfile
     const { stdout: output } = execa.sync(
@@ -76,15 +88,9 @@ if (!YARNHOOK_BYPASS) {
         try {
           execa.sync(cmd, args[cmd], { stdio: "inherit" });
         } catch (err) {
-          console.warn(`Running ${cmd} ${args[cmd].join(' ')} failed`);
+          console.warn(`Running ${cmd} ${args[cmd].join(" ")} failed`);
         }
       }
     }
-  } else {
-    console.log(
-      "I can't seem to find a lockfile. Currently supported lockfiles are: yarn.lock, package-lock.json and shrinkwrap.yaml. Please " +
-        "open an issue at https://github.com/frontsideair/yarnhook/issues if " +
-        "you think it's my fault."
-    );
   }
 }
